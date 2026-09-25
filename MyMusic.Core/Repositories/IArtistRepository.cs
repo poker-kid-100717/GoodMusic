@@ -1,15 +1,12 @@
-﻿using MyMusic.Core.Models;
-using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Threading.Tasks;
+using MyMusic.Core.Models;
 
-namespace MyMusic.Core.Repositories
+namespace MyMusic.Core.Repositories;
+
+public interface IArtistRepository
 {
-    public interface IArtistRepository : IRepository<Artist>
-    {
-        Task<IEnumerable<Artist>> GetAllWithMusicsAsync();
-        Task<Artist> GetWithMusicsByIdAsync(int id);
-
-    }
+    Task<IReadOnlyList<Artist>> GetAllAsync(CancellationToken cancellationToken = default);
+    Task<Artist?> GetByIdAsync(string id, CancellationToken cancellationToken = default);
+    Task CreateAsync(Artist artist, CancellationToken cancellationToken = default);
+    Task<bool> UpdateAsync(Artist artist, CancellationToken cancellationToken = default);
+    Task<bool> DeleteAsync(string id, CancellationToken cancellationToken = default);
 }

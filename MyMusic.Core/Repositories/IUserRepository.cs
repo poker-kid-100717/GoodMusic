@@ -1,18 +1,15 @@
-﻿using MyMusic.Core.Models;
-using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Threading.Tasks;
+using MyMusic.Core.Models;
 
-namespace MyMusic.Core.Repositories
+namespace MyMusic.Core.Repositories;
+
+public interface IUserRepository
 {
-    public interface IUserRepository
-    {
-        Task<User> Authenticate(string username, string password);
-        Task<User> Create(User user, string password);
-        void Update(User user, string password = null);
-        void Delete(int id);
-        Task<IEnumerable<User>> GetAllUserAsync();
-        Task<User> GetWithUsersByIdAsync(int id);
-    }
+    Task<User?> GetByIdAsync(string id, CancellationToken cancellationToken = default);
+    Task<User?> GetByUsernameAsync(string username, CancellationToken cancellationToken = default);
+
+    /// <summary>Returns false if the username is already taken.</summary>
+    Task<bool> TryCreateAsync(User user, CancellationToken cancellationToken = default);
+
+    Task<bool> UpdateAsync(User user, CancellationToken cancellationToken = default);
+    Task<bool> DeleteAsync(string id, CancellationToken cancellationToken = default);
 }

@@ -1,0 +1,20 @@
+{
+  "name": "goodmusic-edge",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Worker that fronts the GoodMusic ASP.NET Core container.",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@cloudflare/containers": "^0.3.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260925.2",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.2",
+    "wrangler": "^4.140.0"
+  }
+}

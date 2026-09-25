@@ -1,17 +1,12 @@
-﻿using MyMusic.Core.Models;
-using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Threading.Tasks;
+using MyMusic.Core.Models;
 
-namespace MyMusic.Core.Services
+namespace MyMusic.Core.Services;
+
+public interface IComposerService
 {
-    public interface IComposerService
-    {
-        Task<IEnumerable<Composer>> GetAllComposers();
-        Task<Composer> GetComposerById(string id);
-        Task<Composer> Create(Composer composer);
-        Task<bool> Delete(string id);
-        void Update(string id, Composer composer);
-    }
+    Task<IReadOnlyList<Composer>> GetAllAsync(CancellationToken cancellationToken = default);
+    Task<Composer?> GetByIdAsync(string id, CancellationToken cancellationToken = default);
+    Task<Composer> CreateAsync(string firstName, string lastName, CancellationToken cancellationToken = default);
+    Task<Composer?> UpdateAsync(string id, string firstName, string lastName, CancellationToken cancellationToken = default);
+    Task<bool> DeleteAsync(string id, CancellationToken cancellationToken = default);
 }

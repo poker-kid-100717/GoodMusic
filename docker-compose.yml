@@ -1,0 +1,11 @@
+# Local MongoDB for development. The API's Development settings point here.
+services:
+  mongo:
+    image: mongo:8.0
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodata:/data/db
+
+volumes:
+  mongodata:

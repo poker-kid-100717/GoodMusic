@@ -1,107 +1,46 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using AutoMapper;
-using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using MyMusic.API.Resources;
-using MyMusic.API.Validations;
-using MyMusic.Core.Models;
+using MyMusic.API.Contracts;
 using MyMusic.Core.Services;
 
-namespace MyMusic.API.Controllers
+namespace MyMusic.API.Controllers;
+
+[ApiController]
+[Route("api/[controller]")]
+public class ArtistController(IArtistService artists) : ControllerBase
 {
-    [Route("api/[controller]")]
-    [ApiController]
-    public class ArtistController : ControllerBase
+    [HttpGet]
+    public async Task<IEnumerable<ArtistResponse>> GetAll(CancellationToken cancellationToken) =>
+        (await artists.GetAllAsync(cancellationToken)).Select(ArtistResponse.From);
+
+    [HttpGet("{id}")]
+    public async Task<ActionResult<ArtistResponse>> GetById(string id, CancellationToken cancellationToken)
     {
-        private readonly IArtistService _artistService;
-        private readonly IMapper _mapper;
+        var artist = await artists.GetByIdAsync(id, cancellationToken);
+        return artist is null ? NotFound() : ArtistResponse.From(artist);
+    }
 
-        public ArtistController(IArtistService artistService, IMapper mapper)
-        {
-            _artistService = artistService;
-            _mapper = mapper;
-        }
+    [Authorize]
+    [HttpPost]
+    public async Task<ActionResult<ArtistResponse>> Create(SaveArtistRequest request, CancellationToken cancellationToken)
+    {
+        var artist = await artists.CreateAsync(request.Name, cancellationToken);
+        return CreatedAtAction(nameof(GetById), new { id = artist.Id }, ArtistResponse.From(artist));
+    }
 
-        [HttpGet("")]
-        public async Task<ActionResult<IEnumerable<ArtistResource>>> GetAllArtists()
-        {
-            var artists = await _artistService.GetAllArtists();
-            var artistResource = _mapper.Map<IEnumerable<Artist>, IEnumerable<ArtistResource>>(artists);
-            return Ok(artistResource);
+    [Authorize]
+    [HttpPut("{id}")]
+    public async Task<ActionResult<ArtistResponse>> Update(string id, SaveArtistRequest request, CancellationToken cancellationToken)
+    {
+        var result = await artists.RenameAsync(id, request.Name, cancellationToken);
+        return result.Status == ServiceStatus.Success ? ArtistResponse.From(result.Value!) : this.ToProblem(result);
+    }
 
-        }
-        [HttpGet("{id}")]
-        public async Task<ActionResult<ArtistResource>> GetArtistById(int id)
-        {
-            var artist = await _artistService.GetArtistById(id);
-            if (artist == null)
-            {
-                return NotFound();
-            }
-            var artistResource = _mapper.Map<Artist, ArtistResource>(artist);
-            return Ok(artistResource);
-        }
-        [HttpPost("")]
-        public async Task<ActionResult<ArtistResource>> CreateArtist([FromBody] SaveArtistResource saveArtistResource)
-        {
-            var validation = new SaveArtistResourceValidator();
-
-            var validationResult = await validation.ValidateAsync(saveArtistResource);
-            if (!validationResult.IsValid)
-            {
-                return BadRequest(validationResult.Errors);
-            }
-            var artist = _mapper.Map<SaveArtistResource, Artist>(saveArtistResource);
-
-            var newArtist = await _artistService.CreateArtist(artist);
-
-            var artistCreated = await _artistService.GetArtistById(newArtist.Id);
-
-            var artistResource = _mapper.Map<Artist, ArtistResource>(artistCreated);
-
-            return Ok(artistResource);
-        }
-
-        [HttpPut("{id}")]
-        public async Task<ActionResult<ArtistResource>> UpdateArtist(int id, [FromBody] SaveArtistResource saveArtistResource)
-        {
-            // validation 
-            var validation = new SaveArtistResourceValidator();
-            var validationResult = await validation.ValidateAsync(saveArtistResource);
-            if (!validationResult.IsValid)
-            {
-                return BadRequest(validationResult.Errors);
-            }
-            var artistToUpdate = await _artistService.GetArtistById(id);
-
-            if (artistToUpdate == null)
-            {
-                return NotFound();
-            }
-            var artist = _mapper.Map<SaveArtistResource, Artist>(saveArtistResource);
-
-            await _artistService.UpdateArtist(artistToUpdate, artist);
-
-            var artistUpdated = await _artistService.GetArtistById(id);
-
-            var artistResource = _mapper.Map<Artist, ArtistResource>(artistUpdated);
-            return Ok(artistResource);
-        }
-
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteArtist(int id)
-        {
-            var artist = await _artistService.GetArtistById(id);
-            if (artist == null)
-            {
-                return NotFound();
-            }
-            await _artistService.DeleteArtist(artist);
-
-            return NoContent();
-        }
+    [Authorize]
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> Delete(string id, CancellationToken cancellationToken)
+    {
+        var result = await artists.DeleteAsync(id, cancellationToken);
+        return result.Status == ServiceStatus.Success ? NoContent() : this.ToProblem(result);
     }
 }
