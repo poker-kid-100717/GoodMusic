@@ -40,6 +40,14 @@ if (string.IsNullOrWhiteSpace(jwt.Key))
     builder.Configuration["Jwt:Key"] = jwt.Key;
 }
 
+// HS256 needs a key of at least 256 bits. Fail at startup rather than on the
+// first sign-in, so a short key can't pass the deploy smoke tests.
+if (Encoding.UTF8.GetByteCount(jwt.Key) < JwtOptions.MinimumKeyBytes)
+{
+    throw new InvalidOperationException(
+        $"Jwt:Key must be at least {JwtOptions.MinimumKeyBytes} bytes (256 bits) for HS256. Generate one with `openssl rand -base64 48`.");
+}
+
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<TokenService>();
 builder.Services

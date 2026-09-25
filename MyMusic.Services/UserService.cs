@@ -33,8 +33,7 @@ public class UserService(IUserRepository users, IPasswordHasher<User> passwordHa
         var result = passwordHasher.VerifyHashedPassword(user, user.PasswordHash, password);
         if (result == PasswordVerificationResult.SuccessRehashNeeded)
         {
-            user.PasswordHash = passwordHasher.HashPassword(user, password);
-            await users.UpdateAsync(user, cancellationToken);
+            await users.ReplacePasswordHashAsync(user.Id, user.PasswordHash, passwordHasher.HashPassword(user, password), cancellationToken);
         }
 
         return result == PasswordVerificationResult.Failed ? null : user;
@@ -43,23 +42,11 @@ public class UserService(IUserRepository users, IPasswordHasher<User> passwordHa
     public Task<User?> GetByIdAsync(string id, CancellationToken cancellationToken = default) =>
         users.GetByIdAsync(id, cancellationToken);
 
-    public async Task<User?> UpdateAsync(string id, string firstName, string lastName, string? newPassword, CancellationToken cancellationToken = default)
+    public Task<User?> UpdateAsync(string id, string firstName, string lastName, string? newPassword, CancellationToken cancellationToken = default)
     {
-        var user = await users.GetByIdAsync(id, cancellationToken);
-        if (user is null)
-        {
-            return null;
-        }
-
-        user.FirstName = firstName.Trim();
-        user.LastName = lastName.Trim();
-        if (!string.IsNullOrEmpty(newPassword))
-        {
-            user.PasswordHash = passwordHasher.HashPassword(user, newPassword);
-        }
-
-        await users.UpdateAsync(user, cancellationToken);
-        return user;
+        // PasswordHasher<TUser> doesn't read the user; a placeholder is enough.
+        var passwordHash = string.IsNullOrEmpty(newPassword) ? null : passwordHasher.HashPassword(new User { Id = id }, newPassword);
+        return users.UpdateProfileAsync(id, firstName.Trim(), lastName.Trim(), passwordHash, cancellationToken);
     }
 
     public Task<bool> DeleteAsync(string id, CancellationToken cancellationToken = default) =>

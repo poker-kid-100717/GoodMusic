@@ -28,11 +28,29 @@ public class UserRepository(MongoContext context) : IUserRepository
         }
     }
 
-    public async Task<bool> UpdateAsync(User user, CancellationToken cancellationToken = default)
+    public async Task<User?> UpdateProfileAsync(string id, string firstName, string lastName, string? passwordHash, CancellationToken cancellationToken = default)
     {
-        if (!MongoContext.IsValidId(user.Id)) return false;
-        var result = await context.Users.ReplaceOneAsync(u => u.Id == user.Id, user, cancellationToken: cancellationToken);
-        return result.MatchedCount > 0;
+        if (!MongoContext.IsValidId(id)) return null;
+
+        var update = Builders<User>.Update.Set(u => u.FirstName, firstName).Set(u => u.LastName, lastName);
+        if (passwordHash is not null)
+        {
+            update = update.Set(u => u.PasswordHash, passwordHash);
+        }
+
+        return await context.Users.FindOneAndUpdateAsync(
+            u => u.Id == id, update,
+            new FindOneAndUpdateOptions<User> { ReturnDocument = ReturnDocument.After }, cancellationToken);
+    }
+
+    public async Task<bool> ReplacePasswordHashAsync(string id, string expectedHash, string newHash, CancellationToken cancellationToken = default)
+    {
+        if (!MongoContext.IsValidId(id)) return false;
+        var result = await context.Users.UpdateOneAsync(
+            u => u.Id == id && u.PasswordHash == expectedHash,
+            Builders<User>.Update.Set(u => u.PasswordHash, newHash),
+            cancellationToken: cancellationToken);
+        return result.ModifiedCount > 0;
     }
 
     public async Task<bool> DeleteAsync(string id, CancellationToken cancellationToken = default)

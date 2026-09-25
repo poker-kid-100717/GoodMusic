@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using MongoDB.Driver;
 using MyMusic.API.Contracts;
@@ -95,6 +97,34 @@ public class UserTests(ApiFixture fixture)
 
         var indexes = await (await context.Users.Indexes.ListAsync()).ToListAsync();
         Assert.Contains(indexes, i => i["key"].AsBsonDocument.Contains("username") && i.GetValue("unique", false).ToBoolean());
+    }
+
+    [Fact]
+    public async Task Overlapping_profile_updates_never_undo_a_password_change()
+    {
+        var (client, session) = await fixture.CreateSignedInClientAsync();
+        var login = fixture.CreateClient();
+
+        for (var round = 0; round < 10; round++)
+        {
+            var password = $"Round{round}Pass!";
+            var results = await Task.WhenAll(
+                client.PutAsJsonAsync("/api/User/me", new UpdateUserRequest("Name", $"Only {round}", null)),
+                client.PutAsJsonAsync("/api/User/me", new UpdateUserRequest("Name", $"Password {round}", password)));
+            Assert.All(results, r => r.EnsureSuccessStatusCode());
+
+            var signIn = await login.PostAsJsonAsync("/api/User/authenticate", new LoginRequest(session.User.Username, password));
+            Assert.Equal(HttpStatusCode.OK, signIn.StatusCode);
+        }
+    }
+
+    [Fact]
+    public void Startup_rejects_a_signing_key_shorter_than_256_bits()
+    {
+        using var factory = fixture.Factory.WithWebHostBuilder(builder => builder.UseSetting("Jwt:Key", "too-short-key"));
+
+        var error = Assert.Throws<InvalidOperationException>(() => factory.CreateClient());
+        Assert.Contains("256 bits", error.Message);
     }
 
     [Fact]

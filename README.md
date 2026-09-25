@@ -61,6 +61,8 @@ docker compose up -d                       # MongoDB 8 single-node replica set o
 dotnet run --project MyMusic.API           # http://localhost:5080 — Swagger UI
 ```
 
+The 2020 version kept artists, songs and users in SQL Server LocalDB and was never deployed. This version starts from an empty MongoDB database and doesn't import that data. Only the old `Composers` MongoDB collection is migrated, automatically.
+
 ## Tests
 
 ```bash
@@ -99,4 +101,4 @@ One-time setup:
 | `CLOUDFLARE_API_TOKEN` | API token using the "Edit Cloudflare Workers" template |
 | `CLOUDFLARE_ACCOUNT_ID` | Workers & Pages → Account ID |
 | `MONGODB_URI` | Atlas connection string |
-| `JWT_KEY` | A long random string, e.g. `openssl rand -base64 48` |
+| `JWT_KEY` | A random string of at least 32 bytes (HS256 needs 256 bits; the API won't start with less), e.g. `openssl rand -base64 48` |
