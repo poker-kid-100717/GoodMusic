@@ -1,0 +1,92 @@
+@import "tailwindcss";
+@import "@fontsource-variable/bricolage-grotesque";
+
+/*
+  GoodMusic palette: cool studio grey with a tangerine accent taken from a
+  record label. Colors are tokens so both themes stay in step.
+*/
+:root {
+  --bg: #f3f4f6;
+  --surface: #ffffff;
+  --surface-2: #eceef2;
+  --ink: #14161b;
+  --muted: #5b6270;
+  --line: #dce0e6;
+  --accent: #df4f26;
+  --accent-ink: #ffffff;
+  --accent-soft: #fbe6de;
+  --danger: #c2302a;
+  --danger-soft: #fbe4e2;
+  --success: #1d7a4b;
+  --success-soft: #e0f2e8;
+  --groove: #1b1d22;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1014;
+    --surface: #161920;
+    --surface-2: #1d2129;
+    --ink: #e8ebf0;
+    --muted: #9aa2b1;
+    --line: #2a2f39;
+    --accent: #ff7447;
+    --accent-ink: #1a0c06;
+    --accent-soft: #3a1c12;
+    --danger: #ff8a80;
+    --danger-soft: #3b1715;
+    --success: #6fd59f;
+    --success-soft: #12301f;
+    --groove: #07080a;
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-display: "Bricolage Grotesque Variable", var(--font-geist-sans), ui-sans-serif, sans-serif;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  text-wrap: balance;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .spin-on-hover:hover .vinyl {
+    animation: spin 1.8s linear infinite;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

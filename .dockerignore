@@ -6,3 +6,4 @@
 MyMusic.API.Tests/
 worker/
 **/appsettings.Development.json
+web/

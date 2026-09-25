@@ -2,11 +2,12 @@
   "name": "goodmusic-edge",
   "private": true,
   "type": "module",
-  "description": "Cloudflare Worker that fronts the GoodMusic ASP.NET Core container.",
+  "description": "Cloudflare Worker that serves the GoodMusic Next.js site and routes the API to its ASP.NET Core container.",
   "scripts": {
+    "build": "npm run build:cloudflare --prefix web",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "deploy": "wrangler deploy"
+    "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
     "@cloudflare/containers": "^0.3.7"

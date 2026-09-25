@@ -2,11 +2,34 @@
 
 [![CI](https://github.com/poker-kid-100717/GoodMusic/actions/workflows/ci.yml/badge.svg)](https://github.com/poker-kid-100717/GoodMusic/actions/workflows/ci.yml)
 
-GoodMusic is a music catalog API (artists, songs, composers and user accounts) built on **ASP.NET Core 10 and MongoDB**. It uses an N-tier layout, and the MongoDB layer is written around documents rather than translated from a relational schema.
+GoodMusic is a music catalog (artists, songs, composers and user accounts). It has two parts:
 
-The API docs (Swagger UI) are the landing page. Register, then click **Authorize** and paste the token to try the write endpoints.
+- **Web app:** a **Next.js 16** site with React Server Components and Server Actions.
+- **API:** **ASP.NET Core 10** on **MongoDB**. It uses an N-tier layout, and the MongoDB layer is written around documents rather than translated from a relational schema.
+
+Both run on Cloudflare: the site on Workers, the API in a Cloudflare Container.
+
+Anyone can browse the catalog. After signing up you can add artists and songs, rename an artist (every song follows), move songs between artists, and manage composers and your account. The REST API and its Swagger UI are at `/swagger`.
 
 ## Architecture
+
+```
+Browser ──► Cloudflare Worker (worker/index.ts)
+              ├── /api/*, /swagger, /health ──► API container (ASP.NET Core 10) ──► MongoDB Atlas
+              └── everything else ─────────────► Next.js app (web/, built for Workers by OpenNext)
+                                                    └── server components and actions call the API
+                                                        through the container binding, not the internet
+```
+
+### Web app (`web/`)
+
+- **Backend-for-frontend.** Pages are server components that read the API on the server. Forms post to Server Actions, which call the API and re-render the affected pages in the same round trip. The browser never calls the API itself.
+- **Session in an httpOnly cookie.** The API's JWT is stored in an `httpOnly`, `SameSite=Lax` cookie (`Secure` in production), so page scripts can't read it. Every Server Action checks for a session before calling the API, and the API checks the token again.
+- **Errors in context.** API validation problems (`400`) show under the matching fields, and refusals such as deleting an artist that still has songs (`409`) show beside the button. An expired session sends you to sign in and back.
+- **Shareable search.** Search boxes filter through `?q=`, so results survive a reload and can be linked.
+- **Details:** each artist's "cover" is a CSS vinyl record whose label color comes from the name. "Recently added" reads creation time from the MongoDB ObjectId, so no extra field is stored. The site is responsive, has light and dark themes, and uses accessible form labels and live-region messages.
+
+### API
 
 ```
 MyMusic.API        Controllers, request/response contracts, validation, JWT auth
@@ -56,9 +79,12 @@ Validation failures return standard `400` problem details, keyed by field.
 
 Requires the .NET 10 SDK and Docker.
 
+Requires Node 20.9+ as well, for the web app.
+
 ```bash
 docker compose up -d                       # MongoDB 8 single-node replica set on localhost:27017
-dotnet run --project MyMusic.API           # http://localhost:5080 — Swagger UI
+dotnet run --project MyMusic.API           # http://localhost:5080 (Swagger UI at /swagger)
+cd web && npm ci && npm run dev            # http://localhost:3000, calls the API at API_URL (default http://localhost:5080)
 ```
 
 The 2020 version kept artists, songs and users in SQL Server LocalDB and was never deployed. This version starts from an empty MongoDB database and doesn't import that data. Only the old `Composers` MongoDB collection is migrated, automatically.
@@ -68,7 +94,19 @@ The 2020 version kept artists, songs and users in SQL Server LocalDB and was nev
 ```bash
 dotnet test        # integration tests: the real API against a MongoDB 8 replica set in Docker (Testcontainers)
 npm ci && npm test # Cloudflare Worker routing
+cd web && npm run test:e2e  # Playwright: the real site, API and MongoDB in Chromium (start MongoDB and the API first)
 ```
+
+The end-to-end suite walks through the site as one user:
+- Browse anonymously, then sign up.
+- Build an artist's discography, then rename the artist and check that every song follows.
+- Get refused when deleting an artist that still has songs.
+- Search, move and delete songs, then delete the now-empty artist.
+- Add, edit and remove composers.
+- Change the password and sign in again.
+- Check that the session cookie is `httpOnly`, and that pages needing a session redirect to sign-in.
+
+CI runs it on every push. It passes both on `next start` and on the Workers build running in `wrangler dev`.
 
 The API tests cover:
 - **Auth:** anonymous writes are rejected; registration, case-insensitive login and duplicate usernames.
@@ -81,14 +119,9 @@ The API tests cover:
 
 The whole app runs on Cloudflare, backed by MongoDB Atlas:
 
-```
-Browser / API client ──► Cloudflare Worker (worker/index.ts)
-                             └──► Cloudflare Container: ASP.NET Core 10 API ──► MongoDB Atlas
-```
-
-- **Deploy:** `wrangler deploy` builds the root `Dockerfile`, pushes the image and deploys the Worker.
+- **Deploy:** `npm run deploy` builds the Next.js site for Workers (OpenNext), then `wrangler deploy` builds the root `Dockerfile`, pushes the image, and deploys the Worker, the site's static assets and the container together.
 - **Container:** runs as a non-root user and keeps no local state. It sleeps after 10 minutes without traffic and starts on the next request.
-- **CI:** on push to `master`, CI builds and tests, then deploys. Afterwards it smoke-tests `/health`, a public read, and checks that an anonymous write gets `401`.
+- **CI:** on push to `master`, CI builds and runs every test suite, then deploys. Afterwards it smoke-tests `/health`, a public API read, a rendered page, and that an anonymous API write gets `401`.
 
 One-time setup:
 

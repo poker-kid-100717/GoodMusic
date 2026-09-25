@@ -1,8 +1,20 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "goodmusic",
+  // Routes /api, /health and /swagger to the API container and everything
+  // else to the Next.js app (built into web/.open-next by `npm run build`).
   "main": "worker/index.ts",
   "compatibility_date": "2026-09-01",
+  // Next.js on Workers (OpenNext) needs the Node.js compatibility layer.
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    "directory": "./web/.open-next/assets",
+    "binding": "ASSETS"
+  },
+  "services": [
+    // OpenNext calls back into its own Worker for some internal requests.
+    { "binding": "WORKER_SELF_REFERENCE", "service": "goodmusic" }
+  ],
   "containers": [
     {
       "class_name": "GoodMusicApi",

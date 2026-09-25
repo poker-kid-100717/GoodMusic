@@ -121,12 +121,12 @@ await app.Services.GetRequiredService<MongoContext>().InitializeAsync();
 app.UseForwardedHeaders();
 app.UseExceptionHandler();
 
-// The API docs are the landing page.
+// API docs at /swagger; the site owns the root.
 app.UseSwagger();
 app.UseSwaggerUI(options =>
 {
     options.SwaggerEndpoint("/swagger/v1/swagger.json", "GoodMusic API v1");
-    options.RoutePrefix = string.Empty;
+    options.RoutePrefix = "swagger";
     options.DocumentTitle = "GoodMusic API";
 });
 
