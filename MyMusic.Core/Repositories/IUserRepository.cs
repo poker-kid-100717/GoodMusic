@@ -1,18 +1,27 @@
-﻿using MyMusic.Core.Models;
-using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Threading.Tasks;
+using MyMusic.Core.Models;
 
-namespace MyMusic.Core.Repositories
+namespace MyMusic.Core.Repositories;
+
+public interface IUserRepository
 {
-    public interface IUserRepository
-    {
-        Task<User> Authenticate(string username, string password);
-        Task<User> Create(User user, string password);
-        void Update(User user, string password = null);
-        void Delete(int id);
-        Task<IEnumerable<User>> GetAllUserAsync();
-        Task<User> GetWithUsersByIdAsync(int id);
-    }
+    Task<User?> GetByIdAsync(string id, CancellationToken cancellationToken = default);
+    Task<User?> GetByUsernameAsync(string username, CancellationToken cancellationToken = default);
+
+    /// <summary>Returns false if the username is already taken.</summary>
+    Task<bool> TryCreateAsync(User user, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Sets only the given fields (the password hash only when not null), so
+    /// overlapping updates can't restore each other's stale values. Returns
+    /// the updated user, or null if not found.
+    /// </summary>
+    Task<User?> UpdateProfileAsync(string id, string firstName, string lastName, string? passwordHash, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Replaces the password hash only if it still equals <paramref name="expectedHash"/>,
+    /// so a rehash on login never undoes a password change made meanwhile.
+    /// </summary>
+    Task<bool> ReplacePasswordHashAsync(string id, string expectedHash, string newHash, CancellationToken cancellationToken = default);
+
+    Task<bool> DeleteAsync(string id, CancellationToken cancellationToken = default);
 }

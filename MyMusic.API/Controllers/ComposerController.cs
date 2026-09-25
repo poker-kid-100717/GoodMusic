@@ -1,68 +1,43 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using AutoMapper;
-using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using MyMusic.API.Resources;
-using MyMusic.API.Validations;
-using MyMusic.Core.Models;
+using MyMusic.API.Contracts;
 using MyMusic.Core.Services;
 
-namespace MyMusic.API.Controllers
+namespace MyMusic.API.Controllers;
+
+[ApiController]
+[Route("api/[controller]")]
+public class ComposerController(IComposerService composers) : ControllerBase
 {
-    [Route("api/[controller]")]
-    [ApiController]
-    public class ComposerController : ControllerBase
+    [HttpGet]
+    public async Task<IEnumerable<ComposerResponse>> GetAll(CancellationToken cancellationToken) =>
+        (await composers.GetAllAsync(cancellationToken)).Select(ComposerResponse.From);
+
+    [HttpGet("{id}")]
+    public async Task<ActionResult<ComposerResponse>> GetById(string id, CancellationToken cancellationToken)
     {
-        private readonly IComposerService _composerService;
-        private readonly IMapper _mapper;
-        public ComposerController(IComposerService composerService, IMapper mapper)
-        {
-            _composerService = composerService;
-            _mapper = mapper;
-        }
-
-        [HttpGet("")]
-        public async Task<ActionResult<IEnumerable<ComposerResource>>> GetAllComposers()
-        {
-            var composers = await _composerService.GetAllComposers();
-            var composerResources = _mapper.Map<IEnumerable<Composer>, IEnumerable<ComposerResource>>(composers);
-            return Ok(composerResources);
-
-        }
-
-        [HttpPost("")]
-        public async Task<ActionResult<ComposerResource>> CreateComposer([FromBody] SaveComposerResource saveComposerResource)
-        {
-            var validation = new SaveComposerResourceValidator();
-            var validationResult = await validation.ValidateAsync(saveComposerResource);
-
-            if (!validationResult.IsValid)
-            {
-                return BadRequest(validationResult.Errors);
-            }
-            var composer = _mapper.Map<SaveComposerResource, Composer>(saveComposerResource);
-
-            var composerCreated = await _composerService.Create(composer);
-
-            var composerResource = _mapper.Map<Composer, ComposerResource>(composerCreated);
-
-            return Ok(composerResource);
-
-
-        }
-        [HttpGet("{id}")]
-        public async Task<ActionResult<ArtistResource>> GetComposerById(string id)
-        {
-            var composer = await _composerService.GetComposerById(id);
-            if (composer == null)
-            {
-                return NotFound();
-            }
-            var composerResource = _mapper.Map<Composer, ComposerResource>(composer);
-            return Ok(composerResource);
-        }
+        var composer = await composers.GetByIdAsync(id, cancellationToken);
+        return composer is null ? NotFound() : ComposerResponse.From(composer);
     }
+
+    [Authorize]
+    [HttpPost]
+    public async Task<ActionResult<ComposerResponse>> Create(SaveComposerRequest request, CancellationToken cancellationToken)
+    {
+        var composer = await composers.CreateAsync(request.FirstName, request.LastName, cancellationToken);
+        return CreatedAtAction(nameof(GetById), new { id = composer.Id }, ComposerResponse.From(composer));
+    }
+
+    [Authorize]
+    [HttpPut("{id}")]
+    public async Task<ActionResult<ComposerResponse>> Update(string id, SaveComposerRequest request, CancellationToken cancellationToken)
+    {
+        var composer = await composers.UpdateAsync(id, request.FirstName, request.LastName, cancellationToken);
+        return composer is null ? NotFound() : ComposerResponse.From(composer);
+    }
+
+    [Authorize]
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> Delete(string id, CancellationToken cancellationToken) =>
+        await composers.DeleteAsync(id, cancellationToken) ? NoContent() : NotFound();
 }

@@ -1,0 +1,21 @@
+# Local MongoDB for development. The API's Development settings point here.
+# It runs as a single-node replica set because the API uses transactions;
+# the healthcheck initiates the set on first start.
+services:
+  mongo:
+    image: mongo:8.0
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodata:/data/db
+    healthcheck:
+      test: >-
+        mongosh --quiet --eval
+        "try { rs.status() } catch { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'localhost:27017' }] }) }"
+      interval: 5s
+      timeout: 10s
+      retries: 10
+
+volumes:
+  mongodata:

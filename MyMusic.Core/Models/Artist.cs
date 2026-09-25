@@ -1,19 +1,16 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.Text;
+namespace MyMusic.Core.Models;
 
-namespace MyMusic.Core.Models
+public class Artist
 {
-    public class Artist
-    {
-        public Artist()
-        {
-            Musics = new Collection<Music>();
-        }
+    public string Id { get; set; } = string.Empty;
 
-        public int Id { get; set; }
-        public string Name { get; set; }
-        public ICollection<Music> Musics { get; set; }
-    }
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Number of songs referencing this artist, changed in the same
+    /// transaction as each song write. Deletion is conditional on it being
+    /// zero, which is what makes "no orphaned songs" hold under concurrent
+    /// requests.
+    /// </summary>
+    public int SongCount { get; set; }
 }

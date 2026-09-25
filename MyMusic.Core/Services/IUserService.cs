@@ -1,18 +1,12 @@
-﻿using MyMusic.Core.Models;
-using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Threading.Tasks;
+using MyMusic.Core.Models;
 
-namespace MyMusic.Core.Services
+namespace MyMusic.Core.Services;
+
+public interface IUserService
 {
-    public interface IUserService
-    {
-        Task<User> Authenticate(string username, string password);
-        Task<IEnumerable<User>> GetAll();
-        Task<User> GetById(int id);
-        Task<User> Create(User user, string password);
-        void Update(User user, string password = null);
-        void Delete(int id);
-    }
+    Task<ServiceResult<User>> RegisterAsync(string username, string password, string firstName, string lastName, CancellationToken cancellationToken = default);
+    Task<User?> AuthenticateAsync(string username, string password, CancellationToken cancellationToken = default);
+    Task<User?> GetByIdAsync(string id, CancellationToken cancellationToken = default);
+    Task<User?> UpdateAsync(string id, string firstName, string lastName, string? newPassword, CancellationToken cancellationToken = default);
+    Task<bool> DeleteAsync(string id, CancellationToken cancellationToken = default);
 }

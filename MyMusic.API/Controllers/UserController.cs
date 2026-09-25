@@ -1,167 +1,65 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IdentityModel.Tokens.Jwt;
-using System.Linq;
-using System.Security.Claims;
-using System.Text;
-using System.Threading.Tasks;
-using AutoMapper;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Configuration;
-using Microsoft.IdentityModel.Tokens;
-using MyMusic.API.Resources;
-using MyMusic.Core.Models;
+using MyMusic.API.Auth;
+using MyMusic.API.Contracts;
 using MyMusic.Core.Services;
 
-namespace MyMusic.API.Controllers
+namespace MyMusic.API.Controllers;
+
+/// <summary>
+/// Registration, sign-in, and the signed-in user's own account. There is no
+/// endpoint to list or edit other users.
+/// </summary>
+[ApiController]
+[Route("api/[controller]")]
+public class UserController(IUserService users, TokenService tokens) : ControllerBase
 {
-    [Route("api/[controller]")]
-    [ApiController]
-    public class UserController : ControllerBase
+    [AllowAnonymous]
+    [HttpPost("register")]
+    public async Task<ActionResult<TokenResponse>> Register(RegisterRequest request, CancellationToken cancellationToken)
     {
-        private IUserService _userService;
-        private IMapper _mapper;
-
-        private readonly Microsoft.Extensions.Configuration.IConfiguration _config;
-
-        public UserController(
-        IUserService userService,
-        IMapper mapper,
-         Microsoft.Extensions.Configuration.IConfiguration config)
+        var result = await users.RegisterAsync(request.Username, request.Password, request.FirstName, request.LastName, cancellationToken);
+        if (result.Status != ServiceStatus.Success)
         {
-            _userService = userService;
-            _mapper = mapper;
-            _config = config;
-        }
-        [AllowAnonymous]
-        [HttpPost("authenticate")]
-        public async Task<IActionResult> Authenticate([FromBody] UserResource userResource)
-        {
-            try
-            {
-                var user = await _userService.Authenticate(userResource.Username, userResource.Password);
-
-                if (user == null)
-                    return BadRequest(new { message = "Username or password is incorrect" });
-
-                var tokenHandler = new JwtSecurityTokenHandler();
-                var key = Encoding.ASCII.GetBytes(_config.GetValue<string>("AppSettings:Secret"));
-                Microsoft.IdentityModel.Logging.IdentityModelEventSource.ShowPII = true;
-                var tokenDescriptor = new SecurityTokenDescriptor
-                {
-                    Subject = new ClaimsIdentity(new Claim[]
-                    {
-                    new Claim(ClaimTypes.Name, user.Id.ToString())
-                    }),
-                    Expires = DateTime.UtcNow.AddDays(7),
-                    SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
-                };
-                var token = tokenHandler.CreateToken(tokenDescriptor);
-                var tokenString = tokenHandler.WriteToken(token);
-
-                // return basic user info (without password) and token to store client side
-                return Ok(new
-                {
-                    Id = user.Id,
-                    Username = user.Username,
-                    FirstName = user.FirstName,
-                    LastName = user.LastName,
-                    Token = tokenString
-                });
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(ex.Message);
-
-            }
+            return this.ToProblem(result);
         }
 
-        [AllowAnonymous]
-        [HttpPost("register")]
-        public async Task<IActionResult> Register([FromBody] UserResource userResource)
-        {
-            // map dto to entity
-            var user = _mapper.Map<User>(userResource);
-
-            try
-            {
-                // save 
-                var userSave = await _userService.Create(user, userResource.Password);
-                var tokenHandler = new JwtSecurityTokenHandler();
-                var key = Encoding.ASCII.GetBytes(_config.GetValue<string>("AppSettings:Secret"));
-                Microsoft.IdentityModel.Logging.IdentityModelEventSource.ShowPII = true;
-                var tokenDescriptor = new SecurityTokenDescriptor
-                {
-                    Subject = new ClaimsIdentity(new Claim[]
-                    {
-                    new Claim(ClaimTypes.Name, userSave.Id.ToString())
-                    }),
-                    Expires = DateTime.UtcNow.AddDays(7),
-                    SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
-                };
-                var token = tokenHandler.CreateToken(tokenDescriptor);
-                var tokenString = tokenHandler.WriteToken(token);
-
-                // return basic user info (without password) and token to store client side
-                return Ok(new
-                {
-                    Id = user.Id,
-                    Username = user.Username,
-                    FirstName = user.FirstName,
-                    LastName = user.LastName,
-                    Token = tokenString
-                });
-            }
-            catch (Exception ex)
-            {
-                // return error message if there was an exception
-                return BadRequest(new { message = ex.Message });
-            }
-        }
-
-        [HttpGet]
-        public async Task<IActionResult> GetAll()
-        {
-            var users = await _userService.GetAll();
-            var userDtos = _mapper.Map<IList<UserResource>>(users);
-            return Ok(userDtos);
-        }
-
-        [HttpGet("{id}")]
-        public async Task<IActionResult> GetById(int id)
-        {
-            var user = await _userService.GetById(id);
-            var userDto = _mapper.Map<UserResource>(user);
-            return Ok(userDto);
-        }
-
-        [HttpPut("{id}")]
-        public IActionResult Update(int id, [FromBody] UserResource userResource)
-        {
-            // map dto to entity and set id
-            var user = _mapper.Map<User>(userResource);
-            user.Id = id;
-
-            try
-            {
-                // save 
-                _userService.Update(user, userResource.Password);
-                return Ok();
-            }
-            catch (Exception ex)
-            {
-                // return error message if there was an exception
-                return BadRequest(new { message = ex.Message });
-            }
-        }
-
-        [HttpDelete("{id}")]
-        public IActionResult Delete(int id)
-        {
-            _userService.Delete(id);
-            return Ok();
-        }
+        var (token, expiresAt) = tokens.CreateToken(result.Value!);
+        return CreatedAtAction(nameof(Me), null, new TokenResponse(token, expiresAt, UserResponse.From(result.Value!)));
     }
+
+    [AllowAnonymous]
+    [HttpPost("authenticate")]
+    public async Task<ActionResult<TokenResponse>> Authenticate(LoginRequest request, CancellationToken cancellationToken)
+    {
+        var user = await users.AuthenticateAsync(request.Username, request.Password, cancellationToken);
+        if (user is null)
+        {
+            return Problem("Username or password is incorrect.", statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        var (token, expiresAt) = tokens.CreateToken(user);
+        return new TokenResponse(token, expiresAt, UserResponse.From(user));
+    }
+
+    [Authorize]
+    [HttpGet("me")]
+    public async Task<ActionResult<UserResponse>> Me(CancellationToken cancellationToken)
+    {
+        var user = await users.GetByIdAsync(User.UserId(), cancellationToken);
+        return user is null ? NotFound() : UserResponse.From(user);
+    }
+
+    [Authorize]
+    [HttpPut("me")]
+    public async Task<ActionResult<UserResponse>> UpdateMe(UpdateUserRequest request, CancellationToken cancellationToken)
+    {
+        var user = await users.UpdateAsync(User.UserId(), request.FirstName, request.LastName, request.Password, cancellationToken);
+        return user is null ? NotFound() : UserResponse.From(user);
+    }
+
+    [Authorize]
+    [HttpDelete("me")]
+    public async Task<IActionResult> DeleteMe(CancellationToken cancellationToken) =>
+        await users.DeleteAsync(User.UserId(), cancellationToken) ? NoContent() : NotFound();
 }

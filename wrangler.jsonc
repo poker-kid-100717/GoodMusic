@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "goodmusic",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-09-01",
+  "containers": [
+    {
+      "class_name": "GoodMusicApi",
+      "image": "./Dockerfile",
+      // The Dockerfile builds several projects, so the context is the repo root.
+      "image_build_context": ".",
+      "max_instances": 1,
+      "instance_type": "basic"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [{ "name": "API", "class_name": "GoodMusicApi" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GoodMusicApi"] }],
+  "observability": { "enabled": true }
+}
