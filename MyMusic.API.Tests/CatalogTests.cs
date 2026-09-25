@@ -62,6 +62,73 @@ public class CatalogTests(ApiFixture fixture)
     }
 
     [Fact]
+    public async Task Artist_song_count_follows_song_writes()
+    {
+        var (client, _) = await fixture.CreateSignedInClientAsync();
+        var first = await Created<ArtistResponse>(await client.PostAsJsonAsync("/api/Artist", new SaveArtistRequest(Unique("First"))));
+        var second = await Created<ArtistResponse>(await client.PostAsJsonAsync("/api/Artist", new SaveArtistRequest(Unique("Second"))));
+
+        var song = await Created<MusicResponse>(await client.PostAsJsonAsync("/api/Music", new SaveMusicRequest("Track", first.Id)));
+        Assert.Equal(1, (await GetArtist(client, first.Id)).SongCount);
+
+        // Moving the song moves the count.
+        (await client.PutAsJsonAsync($"/api/Music/{song.Id}", new SaveMusicRequest("Track", second.Id))).EnsureSuccessStatusCode();
+        Assert.Equal(0, (await GetArtist(client, first.Id)).SongCount);
+        Assert.Equal(1, (await GetArtist(client, second.Id)).SongCount);
+        Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync($"/api/Artist/{first.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await client.DeleteAsync($"/api/Artist/{second.Id}")).StatusCode);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync($"/api/Music/{song.Id}")).StatusCode);
+        Assert.Equal(0, (await GetArtist(client, second.Id)).SongCount);
+    }
+
+    [Fact]
+    public async Task Concurrent_song_creation_never_leaves_an_orphan()
+    {
+        var (client, _) = await fixture.CreateSignedInClientAsync();
+
+        for (var round = 0; round < 10; round++)
+        {
+            var artist = await Created<ArtistResponse>(await client.PostAsJsonAsync("/api/Artist", new SaveArtistRequest(Unique("Racer"))));
+
+            var create = client.PostAsJsonAsync("/api/Music", new SaveMusicRequest("Race", artist.Id));
+            var delete = client.DeleteAsync($"/api/Artist/{artist.Id}");
+            var (created, deleted) = (await create, await delete);
+
+            // Exactly one side wins: either the song exists and the artist too,
+            // or the artist is gone and the song was rejected.
+            if (deleted.StatusCode == HttpStatusCode.NoContent)
+            {
+                Assert.Equal(HttpStatusCode.BadRequest, created.StatusCode);
+                Assert.Empty((await client.GetFromJsonAsync<List<MusicResponse>>($"/api/Music/artist/{artist.Id}"))!);
+            }
+            else
+            {
+                Assert.Equal(HttpStatusCode.Conflict, deleted.StatusCode);
+                Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+                Assert.Equal(HttpStatusCode.OK, (await client.GetAsync($"/api/Artist/{artist.Id}")).StatusCode);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Legacy_composers_collection_is_migrated()
+    {
+        var context = fixture.Factory.Services.GetRequiredService<MongoContext>();
+        var legacyId = ObjectId.GenerateNewId();
+        await context.Database.GetCollection<BsonDocument>("Composers").InsertOneAsync(
+            new BsonDocument { { "_id", legacyId }, { "FirstName", "Ennio" }, { "LastName", "Morricone" } });
+
+        await context.MigrateLegacyComposersAsync();
+        await context.MigrateLegacyComposersAsync(); // idempotent
+
+        var composer = await fixture.CreateClient().GetFromJsonAsync<ComposerResponse>($"/api/Composer/{legacyId}");
+        Assert.Equal(("Ennio", "Morricone"), (composer!.FirstName, composer.LastName));
+        var names = await (await context.Database.ListCollectionNamesAsync()).ToListAsync();
+        Assert.DoesNotContain("Composers", names);
+    }
+
+    [Fact]
     public async Task Song_for_unknown_artist_is_rejected()
     {
         var (client, _) = await fixture.CreateSignedInClientAsync();
@@ -135,6 +202,9 @@ public class CatalogTests(ApiFixture fixture)
         Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync($"/api/Composer/{composer.Id}")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/Composer/{composer.Id}")).StatusCode);
     }
+
+    private static async Task<ArtistResponse> GetArtist(HttpClient client, string id) =>
+        (await client.GetFromJsonAsync<ArtistResponse>($"/api/Artist/{id}"))!;
 
     private static async Task<T> Created<T>(HttpResponseMessage response)
     {

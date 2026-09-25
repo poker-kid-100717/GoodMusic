@@ -3,12 +3,14 @@ using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using MyMusic.API;
 using MyMusic.API.Auth;
 using MyMusic.API.Validation;
 using MyMusic.Core.Models;
+using MyMusic.Core.Repositories;
 using MyMusic.Core.Services;
 using MyMusic.Mongo.Db;
 using MyMusic.Services;
@@ -45,6 +47,19 @@ builder.Services
     .AddJwtBearer(options =>
     {
         options.MapInboundClaims = false;
+        // A token outlives nothing: reject it once its user has been deleted.
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = async context =>
+            {
+                var userId = context.Principal?.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+                var users = context.HttpContext.RequestServices.GetRequiredService<IUserRepository>();
+                if (userId is null || await users.GetByIdAsync(userId, context.HttpContext.RequestAborted) is null)
+                {
+                    context.Fail("The user no longer exists.");
+                }
+            }
+        };
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidIssuer = jwt.Issuer,
@@ -93,7 +108,7 @@ builder.Services.AddSwaggerGen(options =>
 
 var app = builder.Build();
 
-await app.Services.GetRequiredService<MongoContext>().EnsureIndexesAsync();
+await app.Services.GetRequiredService<MongoContext>().InitializeAsync();
 
 app.UseForwardedHeaders();
 app.UseExceptionHandler();

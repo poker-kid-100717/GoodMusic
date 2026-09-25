@@ -70,7 +70,11 @@ public class UserTests(ApiFixture fixture)
         Assert.Equal(HttpStatusCode.OK, relogin.StatusCode);
 
         Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync("/api/User/me")).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/User/me")).StatusCode);
+
+        // The deleted user's still-unexpired token no longer works.
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/User/me")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            (await client.PostAsJsonAsync("/api/Artist", new SaveArtistRequest("After deletion"))).StatusCode);
     }
 
     [Fact]

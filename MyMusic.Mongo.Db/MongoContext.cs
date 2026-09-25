@@ -19,6 +19,50 @@ public class MongoContext
     public IMongoCollection<Composer> Composers => Database.GetCollection<Composer>("composers");
     public IMongoCollection<User> Users => Database.GetCollection<User>("users");
 
+    /// <summary>Prepares the database: legacy data, then indexes. Safe to run repeatedly.</summary>
+    public async Task InitializeAsync(CancellationToken cancellationToken = default)
+    {
+        await MigrateLegacyComposersAsync(cancellationToken);
+        await EnsureIndexesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Earlier versions stored composers in "Composers" with PascalCase
+    /// fields. Merge them into "composers" with this version's field names,
+    /// then drop the old collection. Does nothing once migrated.
+    /// </summary>
+    public async Task MigrateLegacyComposersAsync(CancellationToken cancellationToken = default)
+    {
+        const string legacyName = "Composers";
+
+        var exists = await (await Database.ListCollectionNamesAsync(
+                new ListCollectionNamesOptions { Filter = new BsonDocument("name", legacyName) }, cancellationToken))
+            .AnyAsync(cancellationToken);
+        if (!exists)
+        {
+            return;
+        }
+
+        var pipeline = new[]
+        {
+            new BsonDocument("$project", new BsonDocument
+            {
+                { "firstName", new BsonDocument("$ifNull", new BsonArray { "$firstName", "$FirstName", "" }) },
+                { "lastName", new BsonDocument("$ifNull", new BsonArray { "$lastName", "$LastName", "" }) }
+            }),
+            new BsonDocument("$merge", new BsonDocument
+            {
+                { "into", "composers" },
+                { "whenMatched", "keepExisting" },
+                { "whenNotMatched", "insert" }
+            })
+        };
+
+        await Database.GetCollection<BsonDocument>(legacyName)
+            .AggregateAsync<BsonDocument>(pipeline, cancellationToken: cancellationToken);
+        await Database.DropCollectionAsync(legacyName, cancellationToken);
+    }
+
     /// <summary>Creates the indexes the queries rely on. Safe to run repeatedly.</summary>
     public async Task EnsureIndexesAsync(CancellationToken cancellationToken = default)
     {

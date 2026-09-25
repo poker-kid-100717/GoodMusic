@@ -1,10 +1,14 @@
+using System.Text.Json.Serialization;
 using MyMusic.Core.Models;
 
 namespace MyMusic.API.Contracts;
 
-public record ArtistResponse(string Id, string Name)
+public record ArtistResponse(
+    string Id,
+    string Name,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? SongCount = null)
 {
-    public static ArtistResponse From(Artist artist) => new(artist.Id, artist.Name);
+    public static ArtistResponse From(Artist artist) => new(artist.Id, artist.Name, artist.SongCount);
 }
 
 public record SaveArtistRequest(string Name);

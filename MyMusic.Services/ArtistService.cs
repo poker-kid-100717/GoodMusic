@@ -21,16 +21,14 @@ public class ArtistService(IArtistRepository artists, IMusicRepository musics) :
 
     public async Task<ServiceResult<Artist>> RenameAsync(string id, string name, CancellationToken cancellationToken = default)
     {
-        var artist = await artists.GetByIdAsync(id, cancellationToken);
+        var artist = await artists.RenameAsync(id, name.Trim(), cancellationToken);
         if (artist is null)
         {
             return ServiceResult<Artist>.NotFound();
         }
 
-        artist.Name = name.Trim();
-        await artists.UpdateAsync(artist, cancellationToken);
-
-        // Songs carry a copy of the artist's name; keep it in step.
+        // Songs carry a copy of the artist's name; keep it in step. A song
+        // created while this runs reconciles its own copy (see MusicService).
         await musics.RenameArtistAsync(artist.Id, artist.Name, cancellationToken);
 
         return ServiceResult<Artist>.Ok(artist);
@@ -38,18 +36,11 @@ public class ArtistService(IArtistRepository artists, IMusicRepository musics) :
 
     public async Task<ServiceResult<Artist>> DeleteAsync(string id, CancellationToken cancellationToken = default)
     {
-        var artist = await artists.GetByIdAsync(id, cancellationToken);
-        if (artist is null)
+        return await artists.DeleteIfUnusedAsync(id, cancellationToken) switch
         {
-            return ServiceResult<Artist>.NotFound();
-        }
-
-        if (await musics.AnyByArtistIdAsync(id, cancellationToken))
-        {
-            return ServiceResult<Artist>.Conflict("The artist still has songs. Delete or reassign them first.");
-        }
-
-        await artists.DeleteAsync(id, cancellationToken);
-        return ServiceResult<Artist>.Ok(artist);
+            ArtistDeleteOutcome.Deleted => ServiceResult<Artist>.Ok(new Artist { Id = id }),
+            ArtistDeleteOutcome.HasSongs => ServiceResult<Artist>.Conflict("The artist still has songs. Delete or reassign them first."),
+            _ => ServiceResult<Artist>.NotFound()
+        };
     }
 }
