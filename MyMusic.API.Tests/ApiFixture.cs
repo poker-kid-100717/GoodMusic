@@ -10,10 +10,11 @@ namespace MyMusic.API.Tests;
 /// <summary>
 /// One MongoDB container and one in-process API for the whole test run.
 /// Tests use unique names, so they don't depend on each other's data.
+/// MongoDB runs as a single-node replica set, which transactions require.
 /// </summary>
 public sealed class ApiFixture : IAsyncLifetime
 {
-    private readonly MongoDbContainer _mongo = new MongoDbBuilder("mongo:8.0").Build();
+    private readonly MongoDbContainer _mongo = new MongoDbBuilder("mongo:8.0").WithReplicaSet().Build();
     private WebApplicationFactory<Program>? _factory;
 
     public WebApplicationFactory<Program> Factory => _factory!;

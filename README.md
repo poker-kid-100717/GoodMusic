@@ -24,11 +24,11 @@ MyMusic.Mongo.Db   MongoDB repositories, BSON class maps, indexes
 
 | Decision | Instead of | Why |
 |---|---|---|
-| Songs store `artistId` and a copy of `artistName` | Looking up the artist for every song (`$lookup`, or a second query) | Listing songs is the hot path and reads far outnumber artist renames. When an artist is renamed, the service updates the copies with a single `UpdateMany`, using the index on `artistId`. |
-| Deleting an artist that still has songs returns **409** | Cascading deletes, or leaving orphaned songs | MongoDB has no foreign keys, so the service layer enforces the rule explicitly. |
+| Songs store `artistId` and a copy of `artistName` | Looking up the artist for every song (`$lookup`, or a second query) | Listing songs is the hot path and reads far outnumber artist renames. A rename updates the copies with one `UpdateMany` (using the index on `artistId`) in the same transaction. |
+| Deleting an artist that still has songs returns **409** | Cascading deletes, or leaving orphaned songs | MongoDB has no foreign keys. Artists keep a `songCount`, and deletion is a single `DeleteOne` that only matches when it's zero. |
 | Usernames are stored lowercase, with a **unique index** | Checking before inserting | The index settles concurrent sign-ups for the same name. A duplicate-key error becomes a 409. |
 | Ids are strings in C# and `ObjectId`s in MongoDB, references included | `ObjectId` in the domain model | The domain stays storage-agnostic. A malformed id returns 404 or an empty list, never a 500. |
-| No unit-of-work or repository base class | EF-style `IUnitOfWork` over MongoDB | Each write here touches one document or one `UpdateMany`, so it's already atomic. A unit of work would only imitate transactions the code doesn't need. |
+| Song writes, their artist counters and artist renames each run in one **transaction** | Separate single-document writes with compensation | These touch several documents, and concurrent requests could leave counts or name copies out of step. Snapshot transactions make overlapping writes conflict, and the driver retries the loser. Core only sees an `ITransactionRunner` port. |
 
 ### Security
 
@@ -57,20 +57,20 @@ Validation failures return standard `400` problem details, keyed by field.
 Requires the .NET 10 SDK and Docker.
 
 ```bash
-docker compose up -d                       # MongoDB 8 on localhost:27017
+docker compose up -d                       # MongoDB 8 single-node replica set on localhost:27017
 dotnet run --project MyMusic.API           # http://localhost:5080 — Swagger UI
 ```
 
 ## Tests
 
 ```bash
-dotnet test        # integration tests: the real API against MongoDB 8 in Docker (Testcontainers)
+dotnet test        # integration tests: the real API against a MongoDB 8 replica set in Docker (Testcontainers)
 npm ci && npm test # Cloudflare Worker routing
 ```
 
 The API tests cover:
 - **Auth:** anonymous writes are rejected; registration, case-insensitive login and duplicate usernames.
-- **Data consistency:** a song's artist name follows a rename, and deleting an artist that still has songs is refused.
+- **Data consistency:** a song's artist name follows a rename, deleting an artist that still has songs is refused, and concurrent creates, moves, deletes and renames leave counts and names exact.
 - **Bad input:** validation problems, and malformed or unknown ids.
 - **Storage:** references are stored as ObjectIds, passwords are hashed, and the username index is unique.
 - **Other:** composer CRUD, managing your own account, and the health check.

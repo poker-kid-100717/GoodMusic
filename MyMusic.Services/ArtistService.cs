@@ -4,7 +4,7 @@ using MyMusic.Core.Services;
 
 namespace MyMusic.Services;
 
-public class ArtistService(IArtistRepository artists, IMusicRepository musics) : IArtistService
+public class ArtistService(IArtistRepository artists, IMusicRepository musics, ITransactionRunner transactions) : IArtistService
 {
     public Task<IReadOnlyList<Artist>> GetAllAsync(CancellationToken cancellationToken = default) =>
         artists.GetAllAsync(cancellationToken);
@@ -19,20 +19,20 @@ public class ArtistService(IArtistRepository artists, IMusicRepository musics) :
         return artist;
     }
 
-    public async Task<ServiceResult<Artist>> RenameAsync(string id, string name, CancellationToken cancellationToken = default)
-    {
-        var artist = await artists.RenameAsync(id, name.Trim(), cancellationToken);
-        if (artist is null)
+    public Task<ServiceResult<Artist>> RenameAsync(string id, string name, CancellationToken cancellationToken = default) =>
+        transactions.RunAsync(async ct =>
         {
-            return ServiceResult<Artist>.NotFound();
-        }
+            var artist = await artists.RenameAsync(id, name.Trim(), ct);
+            if (artist is null)
+            {
+                return ServiceResult<Artist>.NotFound();
+            }
 
-        // Songs carry a copy of the artist's name; keep it in step. A song
-        // created while this runs reconciles its own copy (see MusicService).
-        await musics.RenameArtistAsync(artist.Id, artist.Name, cancellationToken);
-
-        return ServiceResult<Artist>.Ok(artist);
-    }
+            // Songs carry a copy of the artist's name; it changes in the same
+            // transaction, so readers never see the two disagree.
+            await musics.RenameArtistAsync(artist.Id, artist.Name, ct);
+            return ServiceResult<Artist>.Ok(artist);
+        }, cancellationToken);
 
     public async Task<ServiceResult<Artist>> DeleteAsync(string id, CancellationToken cancellationToken = default)
     {

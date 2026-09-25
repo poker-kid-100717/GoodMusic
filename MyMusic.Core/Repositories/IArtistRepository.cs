@@ -18,11 +18,8 @@ public interface IArtistRepository
     /// <summary>Sets the name only (leaves the song counter alone). Null if not found.</summary>
     Task<Artist?> RenameAsync(string id, string name, CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Atomically counts one more song for the artist and returns it, or null
-    /// if the artist no longer exists (so the song must not be written).
-    /// </summary>
-    Task<Artist?> AddSongReferenceAsync(string id, CancellationToken cancellationToken = default);
+    /// <summary>Counts one more song for the artist. Call inside the transaction that writes the song.</summary>
+    Task AddSongReferenceAsync(string id, CancellationToken cancellationToken = default);
 
     Task RemoveSongReferenceAsync(string id, CancellationToken cancellationToken = default);
 

@@ -28,6 +28,8 @@ public static class DependencyInjection
         });
 
         services.AddSingleton<MongoContext>();
+        services.AddScoped<MongoSession>();
+        services.AddScoped<ITransactionRunner, MongoTransactionRunner>();
         services.AddScoped<IArtistRepository, ArtistRepository>();
         services.AddScoped<IMusicRepository, MusicRepository>();
         services.AddScoped<IComposerRepository, ComposerRepository>();

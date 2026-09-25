@@ -112,6 +112,56 @@ public class CatalogTests(ApiFixture fixture)
     }
 
     [Fact]
+    public async Task Concurrent_renames_leave_every_song_matching_the_artist()
+    {
+        var (client, _) = await fixture.CreateSignedInClientAsync();
+        var artist = await Created<ArtistResponse>(await client.PostAsJsonAsync("/api/Artist", new SaveArtistRequest(Unique("Prince"))));
+        for (var i = 0; i < 3; i++)
+        {
+            await Created<MusicResponse>(await client.PostAsJsonAsync("/api/Music", new SaveMusicRequest($"Song {i}", artist.Id)));
+        }
+
+        for (var round = 0; round < 10; round++)
+        {
+            var renames = await Task.WhenAll(
+                client.PutAsJsonAsync($"/api/Artist/{artist.Id}", new SaveArtistRequest(Unique("Prince A"))),
+                client.PutAsJsonAsync($"/api/Artist/{artist.Id}", new SaveArtistRequest(Unique("Prince B"))),
+                client.PostAsJsonAsync("/api/Music", new SaveMusicRequest($"Extra {round}", artist.Id)));
+            Assert.All(renames, r => r.EnsureSuccessStatusCode());
+
+            var current = await GetArtist(client, artist.Id);
+            var songs = (await client.GetFromJsonAsync<List<MusicResponse>>($"/api/Music/artist/{artist.Id}"))!;
+            Assert.All(songs, s => Assert.Equal(current.Name, s.Artist.Name));
+            Assert.Equal(songs.Count, current.SongCount);
+        }
+    }
+
+    [Fact]
+    public async Task Concurrent_song_moves_and_deletes_keep_counts_exact()
+    {
+        var (client, _) = await fixture.CreateSignedInClientAsync();
+        var first = await Created<ArtistResponse>(await client.PostAsJsonAsync("/api/Artist", new SaveArtistRequest(Unique("First"))));
+        var second = await Created<ArtistResponse>(await client.PostAsJsonAsync("/api/Artist", new SaveArtistRequest(Unique("Second"))));
+        var third = await Created<ArtistResponse>(await client.PostAsJsonAsync("/api/Artist", new SaveArtistRequest(Unique("Third"))));
+
+        for (var round = 0; round < 10; round++)
+        {
+            var song = await Created<MusicResponse>(await client.PostAsJsonAsync("/api/Music", new SaveMusicRequest("Moving", first.Id)));
+
+            await Task.WhenAll(
+                client.PutAsJsonAsync($"/api/Music/{song.Id}", new SaveMusicRequest("Moving", second.Id)),
+                client.PutAsJsonAsync($"/api/Music/{song.Id}", new SaveMusicRequest("Moving", third.Id)),
+                client.DeleteAsync($"/api/Music/{song.Id}"));
+
+            foreach (var artist in new[] { first, second, third })
+            {
+                var songs = (await client.GetFromJsonAsync<List<MusicResponse>>($"/api/Music/artist/{artist.Id}"))!;
+                Assert.Equal(songs.Count, (await GetArtist(client, artist.Id)).SongCount);
+            }
+        }
+    }
+
+    [Fact]
     public async Task Legacy_composers_collection_is_migrated()
     {
         var context = fixture.Factory.Services.GetRequiredService<MongoContext>();
